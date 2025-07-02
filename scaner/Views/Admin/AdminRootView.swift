@@ -1,9 +1,16 @@
+//
+//  AdminRootView.swift
+//  scaner
+//
+//  Created by Evan on 2025/6/30.
+//
+
 import SwiftUI
 
-struct ScannerRootView: View {
+struct AdminRootView: View {
     var body: some View {
         TabView {
-            ScannerHomeView()
+            AdminHomeView()
                 .tabItem {
                     VStack {
                         Image(systemName: "house")
@@ -13,7 +20,7 @@ struct ScannerRootView: View {
                     }
                 }
 
-            ScannerSettingsView()
+            AdminSettingsView()
                 .tabItem {
                     VStack {
                         Image(systemName: "gearshape")
@@ -23,6 +30,10 @@ struct ScannerRootView: View {
                     }
                 }
         }
-        .navigationTitle("扫码端")
+        .navigationTitle("商品管理系统")
     }
 }
+
+#Preview {
+    AdminRootView()
+} 

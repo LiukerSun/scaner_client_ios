@@ -1,5 +1,5 @@
 //
-//  HomeView.swift
+//  AnchorHomeView.swift
 //  scaner
 //
 //  Created by Evan on 2025/6/30.
@@ -7,17 +7,17 @@
 
 import SwiftUI
 
-struct HomeView: View {
+struct AnchorHomeView: View {
     var body: some View {
         NavigationView {
             VStack {
                 Spacer()
             }
-            .navigationTitle("首页")
+            .navigationTitle("海关查收货物管理系统")
         }
     }
 }
 
 #Preview {
-    HomeView()
+    AnchorHomeView()
 } 

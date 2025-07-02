@@ -9,13 +9,19 @@ import SwiftUI
 
 @main
 struct scanerApp: App {
-    @AppStorage("isNewWorld") private var isNewWorld: Bool = false
+    @AppStorage("appMode") private var appMode: String = "anchor" // "anchor", "scanner", "admin"
+    
     var body: some Scene {
         WindowGroup {
-            if isNewWorld {
+            switch appMode {
+            case "admin":
+                AdminRootView()
+            case "scanner":
                 ScannerRootView()
-            } else {
-                AnchorContentView()
+            case "anchor":
+                AnchorRootView()
+            default:
+                ScannerRootView()
             }
         }
     }
