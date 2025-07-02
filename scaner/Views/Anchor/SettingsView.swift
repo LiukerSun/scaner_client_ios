@@ -27,6 +27,9 @@ struct SettingsView: View {
 }
 
 struct AboutView: View {
+    @AppStorage("isNewWorld") private var isNewWorld: Bool = false
+    @State private var versionTapCount = 0
+    
     var body: some View {
         List {
             Section(header: Text("信息")) {
@@ -41,6 +44,13 @@ struct AboutView: View {
                     Spacer()
                     Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
                         .foregroundColor(.gray)
+                        .onTapGesture {
+                            versionTapCount += 1
+                            if versionTapCount >= 5 {
+                                isNewWorld = true
+                                versionTapCount = 0
+                            }
+                        }
                 }
             }
         }

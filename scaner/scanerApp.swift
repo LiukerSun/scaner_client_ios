@@ -9,9 +9,14 @@ import SwiftUI
 
 @main
 struct scanerApp: App {
+    @AppStorage("isNewWorld") private var isNewWorld: Bool = false
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if isNewWorld {
+                ScannerRootView()
+            } else {
+                AnchorContentView()
+            }
         }
     }
 }

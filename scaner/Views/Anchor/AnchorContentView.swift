@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct ContentView: View {
+struct AnchorContentView: View {
     var body: some View {
         TabView {
             // 首页
@@ -15,20 +15,6 @@ struct ContentView: View {
                 .tabItem {
                     Image(systemName: "house.fill")
                     Text("首页")
-                }
-            
-            // 扫描页面
-            ScanView()
-                .tabItem {
-                    Image(systemName: "qrcode.viewfinder")
-                    Text("扫描")
-                }
-            
-            // 历史记录
-            HistoryView()
-                .tabItem {
-                    Image(systemName: "clock.fill")
-                    Text("历史")
                 }
             
             // 设置页面
