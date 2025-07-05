@@ -10,9 +10,22 @@
 		20943EB92E11F32A000B73AE /* scaner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = scaner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		20EB085D2E18E99A004F681A /* Exceptions for "scaner" folder in "scaner" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 20943EB82E11F32A000B73AE /* scaner */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		20943EBB2E11F32A000B73AE /* scaner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				20EB085D2E18E99A004F681A /* Exceptions for "scaner" folder in "scaner" target */,
+			);
 			path = scaner;
 			sourceTree = "<group>";
 		};
@@ -256,6 +269,9 @@
 				DEVELOPMENT_TEAM = RTXY8Z3Q5D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = scaner/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "App 需要使用相机扫描条形码。";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "App 需要保存图片到您的相册，以便您在系统相册中查看或分享商品图片。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -284,6 +300,9 @@
 				DEVELOPMENT_TEAM = RTXY8Z3Q5D;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = scaner/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "App 需要使用相机扫描条形码。";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "App 需要保存图片到您的相册，以便您在系统相册中查看或分享商品图片。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -1,5 +1,8 @@
 import SwiftUI
 import QuickLook
+import UIKit // 用于保存图片到相册
+import Photos // 请求相册权限
+import Combine
 
 struct ProductManagementView: View {
     @StateObject private var productService = ProductService()
@@ -10,7 +13,6 @@ struct ProductManagementView: View {
     @State private var showingProductDetail = false
     @State private var showingCreateProduct = false
     @State private var selectedImageURL: String?
-    @State private var showingImageViewer = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -109,10 +111,12 @@ struct ProductManagementView: View {
                         }
                     }
             }
-            .sheet(isPresented: $showingImageViewer) {
-                if let imageURL = selectedImageURL {
-                    QuickLookPreview(imageURL: imageURL)
-                }
+            // 仅在selectedImageURL有值时才展示，避免首次进入白屏
+            .fullScreenCover(item: $selectedImageURL, onDismiss: {
+                // 关闭后重置图片URL
+                selectedImageURL = nil
+            }) { imageURL in
+                FullScreenImageViewer(imageURL: imageURL)
             }
             .task {
                 await productService.getProducts(params: searchParams)
@@ -188,8 +192,15 @@ struct ProductManagementView: View {
                                     showingProductDetail = true
                                 }
                             }, onImageTap: { imageURL in
-                                selectedImageURL = imageURL
-                                showingImageViewer = true
+                                // 检查 imageURL 是否为空或无效，避免崩溃
+                                guard !imageURL.isEmpty, 
+                                      URL(string: imageURL) != nil,
+                                      selectedImageURL == nil else { return }
+                                
+                                // 确保在主线程上更新状态
+                                DispatchQueue.main.async {
+                                    selectedImageURL = imageURL
+                                }
                             })
                         }
                         
@@ -638,9 +649,296 @@ class PreviewItem: NSObject, QLPreviewItem {
     }
 }
 
-// MARK: - Preview
-struct ProductManagementView_Previews: PreviewProvider {
-    static var previews: some View {
-        ProductManagementView()
+// MARK: - Full Screen Image Viewer
+struct FullScreenImageViewer: View {
+    let imageURL: String
+    @Environment(\.dismiss) private var dismiss
+    // 当 sharePayload 被赋值时弹出分享面板
+    @State private var sharePayload: SharePayload?
+    // 保存结果提示
+    @State private var showSaveAlert = false
+    @State private var saveAlertMessage = ""
+    // 长按后显示操作菜单
+    @State private var showActionMenu = false
+    @State private var scale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    @State private var imageSize: CGSize = .zero
+    
+    var body: some View {
+        ZStack {
+            // 黑色背景
+            Color.black
+                .ignoresSafeArea()
+            
+            // 图片内容（支持自然缩放与拖动）
+            ZoomableAsyncImage(imageURL: imageURL) {
+                // 长按回调
+                showActionMenu = true
+            }
+            
+            // 顶部工具栏
+            VStack {
+                HStack {
+                    // 返回按钮
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                    
+                    // 分享按钮
+                    Button(action: {
+                        shareImage()
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.top, 50)
+                .padding(.horizontal, 20)
+                
+                Spacer()
+            }
+        }
+        .statusBarHidden()
+        // 当 sharePayload 有值时显示分享弹窗
+        .sheet(item: $sharePayload) { payload in
+            ActivityView(activityItems: payload.items)
+        }
+        // 保存完成/失败提示
+        .alert(saveAlertMessage, isPresented: $showSaveAlert) {
+            Button("确定", role: .cancel) {}
+        }
+        // 操作菜单
+        .confirmationDialog("请选择操作", isPresented: $showActionMenu, titleVisibility: .visible) {
+            Button("保存到相册") {
+                saveImageToAlbum()
+            }
+            Button("取消", role: .cancel) {}
+        }
     }
+    
+    private func shareImage() {
+        // 异步下载图片到本地后再分享，避免直接分享远程URL导致白屏
+        Task {
+            guard let url = URL(string: imageURL) else { return }
+            do {
+                // 30秒超时
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 30
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200, !data.isEmpty {
+                    // 写入临时文件
+                    let tempDir = FileManager.default.temporaryDirectory
+                    let fileName: String
+                    if url.lastPathComponent.isEmpty {
+                        fileName = UUID().uuidString + ".jpg"
+                    } else {
+                        fileName = url.lastPathComponent
+                    }
+                    let tempURL = tempDir.appendingPathComponent(fileName)
+                    // 如果已存在则覆盖
+                    if FileManager.default.fileExists(atPath: tempURL.path) {
+                        try FileManager.default.removeItem(at: tempURL)
+                    }
+                    try data.write(to: tempURL)
+                    // 更新状态触发分享面板
+                    await MainActor.run {
+                        sharePayload = SharePayload(items: [UIImage(data: data) ?? tempURL])
+                    }
+                    return
+                }
+                // 如果下载失败，则直接分享原URL（可能仍然可行）
+                await MainActor.run {
+                    sharePayload = SharePayload(items: [url])
+                }
+            } catch {
+                // 下载出错时，直接分享原URL
+                await MainActor.run {
+                    sharePayload = SharePayload(items: [url])
+                }
+            }
+        }
+    }
+
+    // MARK: - 保存图片到相册
+    private func saveImageToAlbum() {
+        Task {
+            guard let url = URL(string: imageURL) else { return }
+            do {
+                // 30秒超时
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 30
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                if let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200, !data.isEmpty,
+                   let image = UIImage(data: data) {
+                    // 请求相册权限（仅添加权限即可）
+                    let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+                    if status == .notDetermined {
+                        _ = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                    }
+
+                    UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                    await MainActor.run {
+                        saveAlertMessage = "已保存到相册"
+                        showSaveAlert = true
+                    }
+                } else {
+                    await MainActor.run {
+                        saveAlertMessage = "保存失败"
+                        showSaveAlert = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    saveAlertMessage = "保存失败: \(error.localizedDescription)"
+                    showSaveAlert = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - ZoomableAsyncImage - 更自然的缩放与拖动
+struct ZoomableAsyncImage: UIViewRepresentable {
+    let imageURL: String
+    let onLongPress: () -> Void
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.delegate = context.coordinator
+        scrollView.maximumZoomScale = 5
+        scrollView.minimumZoomScale = 1
+        scrollView.backgroundColor = .clear
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.bouncesZoom = true
+        
+        // ImageView
+        let imageView = UIImageView()
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        
+        scrollView.addSubview(imageView)
+        
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            imageView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
+            imageView.heightAnchor.constraint(equalTo: scrollView.heightAnchor)
+        ])
+        
+        // Loading indicator
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.color = .white
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(indicator)
+        NSLayoutConstraint.activate([
+            indicator.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            indicator.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor)
+        ])
+        indicator.startAnimating()
+        
+        // Long press
+        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        scrollView.addGestureRecognizer(longPress)
+        
+        context.coordinator.imageView = imageView
+        context.coordinator.indicator = indicator
+        context.coordinator.loadImage(from: imageURL)
+        
+        return scrollView
+    }
+    
+    func updateUIView(_ uiView: UIScrollView, context: Context) {
+        // Nothing to update; the image only loads once.
+    }
+    
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        let parent: ZoomableAsyncImage
+        var imageView: UIImageView?
+        var indicator: UIActivityIndicatorView?
+        private var cancellable: AnyCancellable?
+        
+        init(_ parent: ZoomableAsyncImage) {
+            self.parent = parent
+        }
+        
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            return imageView
+        }
+        
+        @objc func handleLongPress(_ sender: UILongPressGestureRecognizer) {
+            if sender.state == .began {
+                parent.onLongPress()
+            }
+        }
+        
+        func loadImage(from urlString: String) {
+            guard let url = URL(string: urlString) else { 
+                // URL无效时停止加载指示器
+                DispatchQueue.main.async { [weak self] in
+                    self?.indicator?.stopAnimating()
+                }
+                return 
+            }
+            cancellable = URLSession.shared.dataTaskPublisher(for: url)
+                .map { UIImage(data: $0.data) }
+                .replaceError(with: nil)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] image in
+                    guard let self = self else { return }
+                    self.indicator?.stopAnimating()
+                    self.imageView?.image = image
+                }
+        }
+    }
+}
+
+// 通用的分享 ActivityView
+struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity] = []
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - 让String支持Identifiable，便于作为fullScreenCover(item:)的绑定类型
+extension String: Identifiable {
+    public var id: String { self }
+} 
+
+// MARK: - 让 URL 支持 Identifiable，以便用作 sheet(item:) 绑定类型
+extension URL: Identifiable {
+    public var id: String { absoluteString }
+} 
+
+// MARK: - 分享负载结构
+struct SharePayload: Identifiable {
+    let id = UUID()
+    let items: [Any]
 } 
