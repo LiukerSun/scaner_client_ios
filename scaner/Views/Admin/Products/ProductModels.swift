@@ -210,24 +210,4 @@ struct CreateProductResponse: Codable {
     let data: Product
 }
 
-// MARK: - Source Models
-struct Source: Codable, Identifiable {
-    let id: Int
-    let name: String
-    let code: String
-    let status: Int
-    let remark: String?
-    let createdAt: String
-    let updatedAt: String
-    
-    enum CodingKeys: String, CodingKey {
-        case id, name, code, status, remark
-        case createdAt, updatedAt
-    }
-}
-
-struct SourceListResponse: Codable {
-    let success: Bool
-    let message: String
-    let data: [Source]
-} 
+ 

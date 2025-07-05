@@ -322,7 +322,7 @@ class ProductService: ObservableObject {
         
         let decoder = JSONDecoder()
         let sourceResponse = try decoder.decode(SourceListResponse.self, from: data)
-        return sourceResponse.data
+        return sourceResponse.data.items
     }
 }
 

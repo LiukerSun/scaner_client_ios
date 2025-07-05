@@ -10,6 +10,7 @@ import SwiftUI
 struct AdminHomeView: View {
     @EnvironmentObject var authService: AuthService
     @State private var showingProductManagement = false
+    @State private var showingSourceManagement = false
     
     var body: some View {
         NavigationView {
@@ -68,7 +69,7 @@ struct AdminHomeView: View {
                             icon: "building.2",
                             color: .green
                         ) {
-                            // 这里可以导航到货源管理页面
+                            showingSourceManagement = true
                         }
                         
                         // 用户管理
@@ -100,6 +101,9 @@ struct AdminHomeView: View {
             .background(Color(.systemGroupedBackground))
             .fullScreenCover(isPresented: $showingProductManagement) {
                 ProductManagementView()
+            }
+            .fullScreenCover(isPresented: $showingSourceManagement) {
+                SourceListView()
             }
             .onAppear {
                 // 确保用户信息正确加载
