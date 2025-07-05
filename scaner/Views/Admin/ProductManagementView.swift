@@ -1,6 +1,6 @@
 import SwiftUI
 import QuickLook
-import UIKit // 用于保存图片到相册
+import UIKit // 用于保存图片到相册和触觉反馈
 import Photos // 请求相册权限
 import Combine
 
@@ -12,114 +12,245 @@ struct ProductManagementView: View {
     @State private var selectedProduct: Product?
     @State private var showingProductDetail = false
     @State private var showingCreateProduct = false
-    @State private var selectedImageURL: String?
+    @State private var selectedImageURL: ImageURLWrapper?
     @Environment(\.dismiss) private var dismiss
+    
+    // 滑动返回手势相关状态
+    @State private var dragOffset: CGSize = CGSize.zero
+    @State private var dragStartLocation: CGPoint = CGPoint.zero
+    @State private var hasTriggeredHaptic = false
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // 搜索栏
-                searchBar
-                
-                // 筛选器提示
-                if hasActiveFilters {
-                    filterStatusBar
-                }
-                
-                // 商品列表
-                productList
+            mainContentView
+        }
+    }
+    
+    private var mainContentView: some View {
+        VStack(spacing: 0) {
+            // 滑动返回进度指示器
+            if dragOffset.width > 0 {
+                dragProgressIndicator
             }
-            .navigationTitle("商品管理")
-            .navigationBarTitleDisplayMode(.large)
-            .overlay(
-                // 浮动创建按钮
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Button {
-                            showingCreateProduct = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 56, height: 56)
-                                .background(productService.isLoading ? Color.gray : Color.blue)
-                                .clipShape(Circle())
-                                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
-                        }
-                        .disabled(productService.isLoading)
-                        .padding(.trailing, 20)
-                        .padding(.bottom, 20)
-                    }
+            
+            // 搜索栏
+            searchBar
+            
+            // 筛选器提示
+            if hasActiveFilters {
+                filterStatusBar
+            }
+            
+            // 商品列表
+            productList
+        }
+        .navigationTitle("商品管理")
+        .navigationBarTitleDisplayMode(.large)
+        .offset(x: dragOffset.width > 0 ? dragOffset.width : 0)
+        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.1), value: dragOffset)
+        .simultaneousGesture(swipeGesture)
+        .background(backgroundView)
+        .overlay(floatingButton)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("返回") {
+                    dismiss()
                 }
-            )
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("返回") {
-                        dismiss()
-                    }
+            }
+            
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                // 加载指示器
+                if productService.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
                 }
                 
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    // 加载指示器
-                    if productService.isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
+                Button {
+                    showingFilters = true
+                } label: {
+                    Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .font(.title2)
+                        .foregroundColor(hasActiveFilters ? .blue : .primary)
+                }
+                .disabled(productService.isLoading)
+            }
+        }
+        .sheet(isPresented: $showingFilters) {
+            ProductFilterView(searchParams: $searchParams) { params in
+                self.searchParams = params
+                Task {
+                    await productService.getProducts(params: params)
+                }
+            }
+        }
+        .sheet(isPresented: $showingProductDetail) {
+            if let product = selectedProduct {
+                ProductDetailView(product: product) {
+                    // 商品更新或删除后刷新列表
+                    Task {
+                        await productService.getProducts(params: searchParams)
+                    }
+                }
+            }
+        }
+        .onChange(of: showingProductDetail) { isShowing in
+            // 当sheet关闭时，清除selectedProduct
+            if !isShowing {
+                selectedProduct = nil
+            }
+        }
+        .sheet(isPresented: $showingCreateProduct) {
+            ProductCreateView()
+                .onDisappear {
+                    // 当创建商品页面关闭时刷新列表
+                    Task {
+                        await productService.getProducts(params: searchParams)
+                    }
+                }
+        }
+        // 仅在selectedImageURL有值时才展示，避免首次进入白屏
+        .fullScreenCover(item: $selectedImageURL, onDismiss: {
+            // 关闭后重置图片URL
+            selectedImageURL = nil
+        }) { wrapper in
+            FullScreenImageViewer(imageURL: wrapper.url)
+        }
+        .task {
+            await productService.getProducts(params: searchParams)
+        }
+    }
+    
+    private var dragProgressIndicator: some View {
+        HStack {
+            Rectangle()
+                .fill(dragOffset.width > UIScreen.main.bounds.width / 3 ? Color.green.opacity(0.6) : Color.blue.opacity(0.3))
+                .frame(height: 2)
+                .frame(width: min(dragOffset.width, UIScreen.main.bounds.width))
+                .animation(.easeInOut(duration: 0.1), value: dragOffset.width)
+                .scaleEffect(y: dragOffset.width > UIScreen.main.bounds.width / 3 ? 1.5 : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: dragOffset.width > UIScreen.main.bounds.width / 3)
+            
+            Spacer()
+        }
+        .background(Color.clear)
+        .transition(.opacity)
+    }
+    
+    private var swipeGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                // 只有从屏幕左边缘开始的滑动才响应
+                if dragStartLocation == CGPoint.zero {
+                    dragStartLocation = value.startLocation
+                }
+                
+                // 检查是否从左边缘开始滑动（左边缘30像素内）并且是横向滑动
+                let isFromLeftEdge = dragStartLocation.x < 30
+                let isHorizontalSwipe = abs(value.translation.width) > abs(value.translation.height)
+                let isRightwardSwipe = value.translation.width > 0
+                
+                if isFromLeftEdge && isHorizontalSwipe && isRightwardSwipe {
+                    dragOffset = value.translation
+                    
+                    // 触觉反馈：当滑动距离超过返回阈值时触发
+                    let threshold = UIScreen.main.bounds.width / 3
+                    if dragOffset.width > threshold && !hasTriggeredHaptic {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
+                        hasTriggeredHaptic = true
+                    } else if dragOffset.width < threshold {
+                        hasTriggeredHaptic = false
+                    }
+                }
+            }
+            .onEnded { value in
+                // 检查是否满足返回条件
+                let isFromLeftEdge = dragStartLocation.x < 30
+                let isHorizontalSwipe = abs(value.translation.width) > abs(value.translation.height)
+                let isRightwardSwipe = value.translation.width > 0
+                let hasSignificantMovement = dragOffset.width > UIScreen.main.bounds.width / 3
+                
+                // 重置起始位置和触觉反馈状态
+                dragStartLocation = CGPoint.zero
+                hasTriggeredHaptic = false
+                
+                // 只有在满足所有条件的情况下才触发返回
+                if isFromLeftEdge && isHorizontalSwipe && isRightwardSwipe && hasSignificantMovement {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        dragOffset = CGSize(width: UIScreen.main.bounds.width, height: 0)
                     }
                     
-                    Button {
-                        showingFilters = true
-                    } label: {
-                        Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                            .font(.title2)
-                            .foregroundColor(hasActiveFilters ? .blue : .primary)
+                    // 延迟执行返回，配合动画
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        dismiss()
                     }
-                    .disabled(productService.isLoading)
-                }
-            }
-            .sheet(isPresented: $showingFilters) {
-                ProductFilterView(searchParams: $searchParams) { params in
-                    self.searchParams = params
-                    Task {
-                        await productService.getProducts(params: params)
+                } else {
+                    // 回弹
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        dragOffset = CGSize.zero
                     }
                 }
             }
-            .sheet(isPresented: $showingProductDetail) {
-                if let product = selectedProduct {
-                    ProductDetailView(product: product) {
-                        // 商品更新或删除后刷新列表
-                        Task {
-                            await productService.getProducts(params: searchParams)
+    }
+    
+    private var backgroundView: some View {
+        Group {
+            if dragOffset.width > 0 {
+                HStack {
+                    VStack {
+                        Image(systemName: dragOffset.width > UIScreen.main.bounds.width / 3 ? "arrow.left.circle.fill" : "chevron.left")
+                            .font(.title)
+                            .foregroundColor(.white)
+                            .rotationEffect(.degrees(dragOffset.width > UIScreen.main.bounds.width / 3 ? 5 : 0))
+                            .animation(.easeInOut(duration: 0.2), value: dragOffset.width > UIScreen.main.bounds.width / 3)
+                        
+                        if dragOffset.width > UIScreen.main.bounds.width / 4 {
+                            Text("松开返回管理中心")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .transition(.opacity)
+                        } else {
+                            Text("向右滑动返回")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .transition(.opacity)
                         }
                     }
+                    .opacity(min(1.0, dragOffset.width / 80))
+                    .scaleEffect(min(1.2, 1.0 + dragOffset.width / 400))
+                    .padding(.leading, 20)
+                    
+                    Spacer()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(
+                    Rectangle()
+                        .fill(Color.black.opacity(0.1))
+                        .blur(radius: 0.5)
+                )
             }
-            .onChange(of: showingProductDetail) { isShowing in
-                // 当sheet关闭时，清除selectedProduct
-                if !isShowing {
-                    selectedProduct = nil
+        }
+    }
+    
+    private var floatingButton: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button {
+                    showingCreateProduct = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .frame(width: 56, height: 56)
+                        .background(productService.isLoading ? Color.gray : Color.blue)
+                        .clipShape(Circle())
+                        .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
                 }
-            }
-            .sheet(isPresented: $showingCreateProduct) {
-                ProductCreateView()
-                    .onDisappear {
-                        // 当创建商品页面关闭时刷新列表
-                        Task {
-                            await productService.getProducts(params: searchParams)
-                        }
-                    }
-            }
-            // 仅在selectedImageURL有值时才展示，避免首次进入白屏
-            .fullScreenCover(item: $selectedImageURL, onDismiss: {
-                // 关闭后重置图片URL
-                selectedImageURL = nil
-            }) { imageURL in
-                FullScreenImageViewer(imageURL: imageURL)
-            }
-            .task {
-                await productService.getProducts(params: searchParams)
+                .disabled(productService.isLoading)
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
             }
         }
     }
@@ -199,7 +330,7 @@ struct ProductManagementView: View {
                                 
                                 // 确保在主线程上更新状态
                                 DispatchQueue.main.async {
-                                    selectedImageURL = imageURL
+                                    selectedImageURL = ImageURLWrapper(url: imageURL)
                                 }
                             })
                         }
@@ -649,6 +780,12 @@ class PreviewItem: NSObject, QLPreviewItem {
     }
 }
 
+// MARK: - Identifiable Wrappers
+struct ImageURLWrapper: Identifiable {
+    let id = UUID()
+    let url: String
+}
+
 // MARK: - Full Screen Image Viewer
 struct FullScreenImageViewer: View {
     let imageURL: String
@@ -927,17 +1064,7 @@ struct ActivityView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-// MARK: - 让String支持Identifiable，便于作为fullScreenCover(item:)的绑定类型
-extension String: Identifiable {
-    public var id: String { self }
-} 
-
-// MARK: - 让 URL 支持 Identifiable，以便用作 sheet(item:) 绑定类型
-extension URL: Identifiable {
-    public var id: String { absoluteString }
-} 
-
-// MARK: - 分享负载结构
+// MARK: - Identifiable Wrappers
 struct SharePayload: Identifiable {
     let id = UUID()
     let items: [Any]

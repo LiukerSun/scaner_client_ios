@@ -306,11 +306,8 @@ struct ProductEditView: View {
         }
         
         // 并行加载颜色和货源数据
-        async let colorsTask = loadColors()
-        async let sourcesTask = loadSources()
-        
-        await colorsTask
-        await sourcesTask
+        await loadColors()
+        await loadSources()
         
         // 设置已选择的颜色和货源
         await MainActor.run {

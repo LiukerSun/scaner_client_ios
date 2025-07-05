@@ -408,8 +408,8 @@ struct ProductDetailView: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 InfoRow(label: "商品ID", value: "\(product.id)")
-                InfoRow(label: "创建时间", value: formatDate(product.createdAt ?? ""))
-                InfoRow(label: "更新时间", value: formatDate(product.updatedAt ?? ""))
+                InfoRow(label: "创建时间", value: formatDate(product.createdAt))
+                InfoRow(label: "更新时间", value: formatDate(product.updatedAt))
             }
         }
         .padding()
