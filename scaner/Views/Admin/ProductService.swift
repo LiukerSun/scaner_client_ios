@@ -164,6 +164,166 @@ class ProductService: ObservableObject {
         total = 0
         errorMessage = ""
     }
+    
+    // MARK: - Create Product
+    func createProduct(request: CreateProductRequest) async throws -> Product {
+        guard let url = URL(string: "\(baseURL)/product") else {
+            throw ProductError.invalidURL
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加JWT token
+        if let token = UserDefaults.standard.string(forKey: "jwt_token") {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let encoder = JSONEncoder()
+        urlRequest.httpBody = try encoder.encode(request)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ProductError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 201 || httpResponse.statusCode == 200 else {
+            if let errorData = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw ProductError.serverError(errorData.error ?? "创建商品失败")
+            }
+            throw ProductError.serverError("创建商品失败")
+        }
+        
+        let decoder = JSONDecoder()
+        let createResponse = try decoder.decode(CreateProductResponse.self, from: data)
+        return createResponse.data
+    }
+    
+    // MARK: - Update Product
+    func updateProduct(id: Int, request: CreateProductRequest) async throws -> Product {
+        guard let url = URL(string: "\(baseURL)/product/\(id)") else {
+            throw ProductError.invalidURL
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "PUT"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加JWT token
+        if let token = UserDefaults.standard.string(forKey: "jwt_token") {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let encoder = JSONEncoder()
+        urlRequest.httpBody = try encoder.encode(request)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ProductError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorData = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw ProductError.serverError(errorData.error ?? "更新商品失败")
+            }
+            throw ProductError.serverError("更新商品失败")
+        }
+        
+        let decoder = JSONDecoder()
+        let updateResponse = try decoder.decode(CreateProductResponse.self, from: data)
+        return updateResponse.data
+    }
+    
+    // MARK: - Delete Product
+    func deleteProduct(id: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/product/\(id)") else {
+            throw ProductError.invalidURL
+        }
+        
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "DELETE"
+        
+        // 添加JWT token
+        if let token = UserDefaults.standard.string(forKey: "jwt_token") {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ProductError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorData = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw ProductError.serverError(errorData.error ?? "删除商品失败")
+            }
+            throw ProductError.serverError("删除商品失败")
+        }
+    }
+    
+    // MARK: - Get Available Colors
+    func getAvailableColors() async throws -> [ProductColor] {
+        guard let url = URL(string: "\(baseURL)/product/colors") else {
+            throw ProductError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加JWT token
+        if let token = UserDefaults.standard.string(forKey: "jwt_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ProductError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw ProductError.serverError("获取颜色列表失败")
+        }
+        
+        let decoder = JSONDecoder()
+        let colorResponse = try decoder.decode(ColorListResponse.self, from: data)
+        return colorResponse.data
+    }
+    
+    // MARK: - Get Available Sources
+    func getAvailableSources() async throws -> [Source] {
+        guard let url = URL(string: "\(baseURL)/source/active") else {
+            throw ProductError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加JWT token
+        if let token = UserDefaults.standard.string(forKey: "jwt_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ProductError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw ProductError.serverError("获取货源列表失败")
+        }
+        
+        let decoder = JSONDecoder()
+        let sourceResponse = try decoder.decode(SourceListResponse.self, from: data)
+        return sourceResponse.data
+    }
 }
 
 // MARK: - Error Handling

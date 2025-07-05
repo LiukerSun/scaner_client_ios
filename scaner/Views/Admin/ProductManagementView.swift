@@ -1,4 +1,5 @@
 import SwiftUI
+import QuickLook
 
 struct ProductManagementView: View {
     @StateObject private var productService = ProductService()
@@ -7,6 +8,9 @@ struct ProductManagementView: View {
     @State private var showingFilters = false
     @State private var selectedProduct: Product?
     @State private var showingProductDetail = false
+    @State private var showingCreateProduct = false
+    @State private var selectedImageURL: String?
+    @State private var showingImageViewer = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -25,6 +29,29 @@ struct ProductManagementView: View {
             }
             .navigationTitle("商品管理")
             .navigationBarTitleDisplayMode(.large)
+            .overlay(
+                // 浮动创建按钮
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            showingCreateProduct = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .frame(width: 56, height: 56)
+                                .background(productService.isLoading ? Color.gray : Color.blue)
+                                .clipShape(Circle())
+                                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                        }
+                        .disabled(productService.isLoading)
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
+                    }
+                }
+            )
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("返回") {
@@ -32,10 +59,21 @@ struct ProductManagementView: View {
                     }
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("筛选") {
-                        showingFilters = true
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    // 加载指示器
+                    if productService.isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
                     }
+                    
+                    Button {
+                        showingFilters = true
+                    } label: {
+                        Image(systemName: hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                            .font(.title2)
+                            .foregroundColor(hasActiveFilters ? .blue : .primary)
+                    }
+                    .disabled(productService.isLoading)
                 }
             }
             .sheet(isPresented: $showingFilters) {
@@ -48,7 +86,32 @@ struct ProductManagementView: View {
             }
             .sheet(isPresented: $showingProductDetail) {
                 if let product = selectedProduct {
-                    ProductDetailView(product: product)
+                    ProductDetailView(product: product) {
+                        // 商品更新或删除后刷新列表
+                        Task {
+                            await productService.getProducts(params: searchParams)
+                        }
+                    }
+                }
+            }
+            .onChange(of: showingProductDetail) { isShowing in
+                // 当sheet关闭时，清除selectedProduct
+                if !isShowing {
+                    selectedProduct = nil
+                }
+            }
+            .sheet(isPresented: $showingCreateProduct) {
+                ProductCreateView()
+                    .onDisappear {
+                        // 当创建商品页面关闭时刷新列表
+                        Task {
+                            await productService.getProducts(params: searchParams)
+                        }
+                    }
+            }
+            .sheet(isPresented: $showingImageViewer) {
+                if let imageURL = selectedImageURL {
+                    QuickLookPreview(imageURL: imageURL)
                 }
             }
             .task {
@@ -69,6 +132,7 @@ struct ProductManagementView: View {
                 performSearch()
             }
             .buttonStyle(.borderedProminent)
+            .disabled(productService.isLoading)
         }
         .padding()
         .background(Color(.systemGroupedBackground))
@@ -82,11 +146,12 @@ struct ProductManagementView: View {
             
             Spacer()
             
-            Button("清除筛选") {
+            Button("清除全部") {
                 clearFilters()
             }
             .font(.caption)
             .foregroundColor(.blue)
+            .disabled(productService.isLoading)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -103,11 +168,29 @@ struct ProductManagementView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(productService.products) { product in
-                            ProductRowView(product: product) {
-                                selectedProduct = product
-                                showingProductDetail = true
+                        // 顶部加载指示器
+                        if productService.isLoading && !productService.products.isEmpty {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("刷新中...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
+                            .padding(.vertical, 8)
+                        }
+                        
+                        ForEach(productService.products) { product in
+                            ProductRowView(product: product, onTap: {
+                                // 确保状态在主线程更新
+                                DispatchQueue.main.async {
+                                    selectedProduct = product
+                                    showingProductDetail = true
+                                }
+                            }, onImageTap: { imageURL in
+                                selectedImageURL = imageURL
+                                showingImageViewer = true
+                            })
                         }
                         
                         // 加载更多
@@ -116,6 +199,9 @@ struct ProductManagementView: View {
                         }
                     }
                     .padding()
+                }
+                .refreshable {
+                    await productService.getProducts(params: searchParams)
                 }
             }
         }
@@ -161,6 +247,7 @@ struct ProductManagementView: View {
     }
     
     private var hasActiveFilters: Bool {
+        searchParams.name != nil ||
         searchParams.sourceId != nil ||
         searchParams.minPrice != nil ||
         searchParams.maxPrice != nil ||
@@ -187,17 +274,73 @@ struct ProductManagementView: View {
             await productService.getProducts(params: searchParams)
         }
     }
+    
+
 }
 
 // MARK: - Product Row View
 struct ProductRowView: View {
     let product: Product
     let onTap: () -> Void
+    let onImageTap: (String) -> Void
+    
+    // 获取主图或第一张图片
+    private var mainImageURL: String? {
+        if let images = product.images, !images.isEmpty {
+            // 优先返回主图
+            if let mainImage = images.first(where: { $0.isMain }) {
+                return mainImage.url
+            }
+            // 如果没有主图，返回第一张图片
+            return images.first?.url
+        }
+        return nil
+    }
     
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
+                    // 商品缩略图
+                    if let imageURL = mainImageURL {
+                        Button(action: {
+                            onImageTap(imageURL)
+                        }) {
+                            AsyncImage(url: URL(string: imageURL)) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .overlay(
+                                            ProgressView()
+                                                .scaleEffect(0.8)
+                                        )
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                case .failure(_):
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .overlay(
+                                            Image(systemName: "photo.badge.exclamationmark")
+                                                .foregroundColor(.red)
+                                        )
+                                @unknown default:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .foregroundColor(.gray)
+                                        )
+                                }
+                            }
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    
                     VStack(alignment: .leading, spacing: 4) {
                         Text(product.name)
                             .font(.headline)
@@ -291,6 +434,207 @@ struct ProductRowView: View {
             .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - QuickLook Preview
+struct QuickLookPreview: UIViewControllerRepresentable {
+    let imageURL: String
+    @State private var previewItem: PreviewItem?
+    @State private var isLoading = true
+    
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let controller = QLPreviewController()
+        controller.dataSource = context.coordinator
+        controller.delegate = context.coordinator
+        
+        // 添加完成按钮和分享按钮
+        controller.navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .done,
+            target: context.coordinator,
+            action: #selector(context.coordinator.dismissPreview)
+        )
+        
+        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .action,
+            target: context.coordinator,
+            action: #selector(context.coordinator.shareImage)
+        )
+        
+        let navController = UINavigationController(rootViewController: controller)
+        navController.modalPresentationStyle = .fullScreen
+        
+        // 禁用向下滑动关闭手势
+        navController.isModalInPresentation = true
+        
+        return navController
+    }
+    
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
+        // 只在第一次加载时下载图片
+        if isLoading {
+            Task {
+                await context.coordinator.downloadImage(from: imageURL)
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    if let previewController = uiViewController.topViewController as? QLPreviewController {
+                        previewController.reloadData()
+                    }
+                }
+            }
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
+        let parent: QuickLookPreview
+        private var previewItem: PreviewItem?
+        private weak var previewController: QLPreviewController?
+        
+        init(_ parent: QuickLookPreview) {
+            self.parent = parent
+        }
+        
+        func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+            self.previewController = controller
+            return 1 // 始终返回1，显示加载或实际内容
+        }
+        
+        func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+            if let item = previewItem {
+                return item
+            } else {
+                // 创建一个加载占位符
+                let tempURL = createLoadingPlaceholder()
+                return PreviewItem(url: tempURL, title: "正在加载...")
+            }
+        }
+        
+        private func createLoadingPlaceholder() -> URL {
+            let tempDirectory = FileManager.default.temporaryDirectory
+            let tempURL = tempDirectory.appendingPathComponent("loading.txt")
+            
+            let loadingText = "正在加载图片，请稍候..."
+            try? loadingText.write(to: tempURL, atomically: true, encoding: .utf8)
+            
+            return tempURL
+        }
+        
+        private func createErrorPlaceholder() -> URL {
+            let tempDirectory = FileManager.default.temporaryDirectory
+            let tempURL = tempDirectory.appendingPathComponent("error.txt")
+            
+            let errorText = "图片加载失败，请检查网络连接或稍后重试。"
+            try? errorText.write(to: tempURL, atomically: true, encoding: .utf8)
+            
+            return tempURL
+        }
+        
+        // 启用分享功能
+        func previewController(_ controller: QLPreviewController, editingModeFor previewItem: QLPreviewItem) -> QLPreviewItemEditingMode {
+            return .createCopy
+        }
+        
+        @objc func dismissPreview() {
+            previewController?.dismiss(animated: true)
+        }
+        
+        @objc func shareImage() {
+            guard let previewItem = previewItem,
+                  let url = previewItem.previewItemURL else { return }
+            
+            let activityViewController = UIActivityViewController(
+                activityItems: [url],
+                applicationActivities: nil
+            )
+            
+            // 为iPad设置popover
+            if let popoverController = activityViewController.popoverPresentationController {
+                popoverController.barButtonItem = previewController?.navigationItem.rightBarButtonItem
+            }
+            
+            previewController?.present(activityViewController, animated: true)
+        }
+        
+        @MainActor
+        func downloadImage(from urlString: String) async {
+            guard let url = URL(string: urlString) else { 
+                print("无效的图片URL: \(urlString)")
+                return 
+            }
+            
+            do {
+                // 设置超时时间
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 30.0
+                
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                // 检查响应状态
+                if let httpResponse = response as? HTTPURLResponse {
+                    guard httpResponse.statusCode == 200 else {
+                        print("图片下载失败，状态码: \(httpResponse.statusCode)")
+                        return
+                    }
+                }
+                
+                // 检查数据是否有效
+                guard data.count > 0 else {
+                    print("图片数据为空")
+                    return
+                }
+                
+                // 创建临时文件
+                let tempDirectory = FileManager.default.temporaryDirectory
+                let fileName = url.lastPathComponent.isEmpty ? "image.jpg" : url.lastPathComponent
+                let tempURL = tempDirectory.appendingPathComponent(fileName)
+                
+                // 如果文件已存在，先删除
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    try FileManager.default.removeItem(at: tempURL)
+                }
+                
+                try data.write(to: tempURL)
+                
+                // 验证文件是否成功写入
+                guard FileManager.default.fileExists(atPath: tempURL.path) else {
+                    print("临时文件写入失败")
+                    return
+                }
+                
+                self.previewItem = PreviewItem(url: tempURL, title: "商品图片")
+                
+                // 立即刷新预览
+                DispatchQueue.main.async {
+                    self.previewController?.reloadData()
+                }
+                
+            } catch {
+                print("下载图片失败: \(error.localizedDescription)")
+                
+                // 创建错误占位符
+                let errorURL = self.createErrorPlaceholder()
+                self.previewItem = PreviewItem(url: errorURL, title: "图片加载失败")
+                
+                DispatchQueue.main.async {
+                    self.previewController?.reloadData()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Preview Item
+class PreviewItem: NSObject, QLPreviewItem {
+    var previewItemURL: URL?
+    var previewItemTitle: String?
+    
+    init(url: URL, title: String) {
+        self.previewItemURL = url
+        self.previewItemTitle = title
     }
 }
 

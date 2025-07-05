@@ -164,4 +164,70 @@ struct ProductSearchParams {
         
         return items
     }
+}
+
+// MARK: - Create Product Models
+struct CreateProductRequest: Codable {
+    let name: String
+    let sku: String
+    let price: Double
+    let discountPrice: Double?
+    let costPrice: Double
+    let isDiscounted: Bool
+    let isEnabled: Bool
+    let shippingTime: String?
+    let sourceId: Int?
+    let colors: [String]?
+    let images: [CreateProductImage]?
+    
+    enum CodingKeys: String, CodingKey {
+        case name, sku, price, colors, images
+        case discountPrice = "discount_price"
+        case costPrice = "cost_price"
+        case isDiscounted = "is_discounted"
+        case isEnabled = "is_enabled"
+        case shippingTime = "shipping_time"
+        case sourceId = "source_id"
+    }
+}
+
+struct CreateProductImage: Codable {
+    let url: String
+    let alt: String?
+    let title: String?
+    let isMain: Bool
+    let sort: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case url, alt, title, sort
+        case isMain = "is_main"
+    }
+}
+
+struct CreateProductResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: Product
+}
+
+// MARK: - Source Models
+struct Source: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let code: String
+    let status: Int
+    let remark: String?
+    let createdAt: String
+    let updatedAt: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name, code, status, remark
+        case createdAt, updatedAt
+    }
+}
+
+struct SourceListResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: [Source]
 } 
