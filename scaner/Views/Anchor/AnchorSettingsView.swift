@@ -65,7 +65,3 @@ struct AboutView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-
-#Preview {
-    AnchorSettingsView()
-} 

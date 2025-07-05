@@ -65,7 +65,3 @@ struct AdminAboutView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-
-#Preview {
-    AdminSettingsView()
-}

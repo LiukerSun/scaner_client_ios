@@ -18,6 +18,3 @@ struct AnchorHomeView: View {
     }
 }
 
-#Preview {
-    AnchorHomeView()
-} 

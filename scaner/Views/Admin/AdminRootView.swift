@@ -33,7 +33,3 @@ struct AdminRootView: View {
         .navigationTitle("商品管理系统")
     }
 }
-
-#Preview {
-    AdminRootView()
-} 

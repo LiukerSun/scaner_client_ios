@@ -18,6 +18,3 @@ struct AdminHomeView: View {
     }
 }
 
-#Preview {
-    AdminHomeView()
-} 
