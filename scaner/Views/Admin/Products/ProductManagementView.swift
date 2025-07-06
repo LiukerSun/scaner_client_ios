@@ -85,15 +85,17 @@ struct ProductManagementView: View {
         }
         .sheet(isPresented: $showingProductDetail) {
             if let product = selectedProduct {
-                ProductDetailView(product: product) {
-                    // 商品更新或删除后刷新列表
-                    Task {
-                        await productService.getProducts(params: searchParams)
+                NavigationStack {
+                    ProductDetailView(product: product) {
+                        // 商品更新或删除后刷新列表
+                        Task {
+                            await productService.getProducts(params: searchParams)
+                        }
                     }
                 }
             }
         }
-        .onChange(of: showingProductDetail) { isShowing in
+        .onChange(of: showingProductDetail) { _, isShowing in
             // 当sheet关闭时，清除selectedProduct
             if !isShowing {
                 selectedProduct = nil

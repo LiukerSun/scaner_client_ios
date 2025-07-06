@@ -98,10 +98,15 @@ struct SourceListView: View {
                 }
             }
 
-            .alert("错误", isPresented: .constant(!sourceService.errorMessage.isEmpty)) {
-                Button("确定") {
-                    sourceService.errorMessage = ""
+            .alert("错误", isPresented: Binding<Bool>(
+                get: { !sourceService.errorMessage.isEmpty },
+                set: { newValue in
+                    if !newValue {
+                        sourceService.errorMessage = ""
+                    }
                 }
+            )) {
+                Button("确定") { }
             } message: {
                 Text(sourceService.errorMessage)
             }
@@ -151,6 +156,7 @@ struct SourceRowView: View {
                 Text("备注: \(remark)")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .lineLimit(2)
                     .padding(.top, 4)
             }
             
@@ -159,7 +165,7 @@ struct SourceRowView: View {
                 Text("创建时间:")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text(formatDate(source.createdAt))
+                Text(formatDate(source.createdAt ?? ""))
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
@@ -168,7 +174,7 @@ struct SourceRowView: View {
                 Text("更新时间:")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Text(formatDate(source.updatedAt))
+                Text(formatDate(source.updatedAt ?? ""))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

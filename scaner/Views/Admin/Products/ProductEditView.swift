@@ -113,17 +113,13 @@ struct ProductEditView: View {
                     VStack(alignment: .leading) {
                         Text("销售价格")
                             .font(.headline)
-                        TextField("请输入销售价格", value: $price, format: .currency(code: "CNY"))
-                            .keyboardType(.decimalPad)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        SelectAllCurrencyTextField(value: $price, placeholder: "请输入销售价格")
                     }
                     
                     VStack(alignment: .leading) {
                         Text("成本价格")
                             .font(.headline)
-                        TextField("请输入成本价格", value: $costPrice, format: .currency(code: "CNY"))
-                            .keyboardType(.decimalPad)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        SelectAllCurrencyTextField(value: $costPrice, placeholder: "请输入成本价格")
                     }
                     
                     Toggle("启用优惠", isOn: $isDiscounted)
@@ -132,9 +128,7 @@ struct ProductEditView: View {
                         VStack(alignment: .leading) {
                             Text("优惠价格")
                                 .font(.headline)
-                            TextField("请输入优惠价格", value: $discountPrice, format: .currency(code: "CNY"))
-                                .keyboardType(.decimalPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            SelectAllCurrencyTextField(value: $discountPrice, placeholder: "请输入优惠价格")
                         }
                     }
                 }
@@ -251,6 +245,14 @@ struct ProductEditView: View {
                     availableColors: availableColors,
                     selectedColors: $selectedColors
                 )
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") {
+                        UIApplication.shared.endEditing()
+                    }
+                }
             }
         }
     }
