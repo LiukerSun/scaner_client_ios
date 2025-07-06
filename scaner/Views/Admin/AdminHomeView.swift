@@ -11,6 +11,8 @@ struct AdminHomeView: View {
     @EnvironmentObject var authService: AuthService
     @State private var showingProductManagement = false
     @State private var showingSourceManagement = false
+    @State private var showingUserManagement = false
+    @State private var showingColorManagement = false
     
     var body: some View {
         NavigationView {
@@ -79,7 +81,7 @@ struct AdminHomeView: View {
                             icon: "person.3",
                             color: .orange
                         ) {
-                            // 这里可以导航到用户管理页面
+                            showingUserManagement = true
                         }
                         
                         // 颜色管理
@@ -89,7 +91,7 @@ struct AdminHomeView: View {
                             icon: "paintbrush",
                             color: .purple
                         ) {
-                            // 这里可以导航到颜色管理页面
+                            showingColorManagement = true
                         }
                     }
                     
@@ -104,6 +106,12 @@ struct AdminHomeView: View {
             }
             .fullScreenCover(isPresented: $showingSourceManagement) {
                 SourceListView()
+            }
+            .fullScreenCover(isPresented: $showingUserManagement) {
+                UserListView()
+            }
+            .fullScreenCover(isPresented: $showingColorManagement) {
+                ColorListView()
             }
             .onAppear {
                 // 确保用户信息正确加载
