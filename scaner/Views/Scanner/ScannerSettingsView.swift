@@ -8,9 +8,27 @@
 import SwiftUI
 
 struct ScannerSettingsView: View {
+  @AppStorage("backendURL") private var backendURL: String = "http://192.168.50.128:5000"
+  @AppStorage("scannerTorchOn") private var scannerTorchOn: Bool = false
+
   var body: some View {
     NavigationView {
       List {
+        Section(header: Text("网络设置")) {
+          NavigationLink(destination: BackendURLSettingsView()) {
+            HStack {
+              Text("后端地址")
+              Spacer()
+              Text(backendURL)
+                .font(.subheadline)
+                .foregroundColor(.gray)
+                .lineLimit(1)
+            }
+          }
+        }
+        Section(header: Text("扫描设置")) {
+          Toggle("扫码时开启闪光灯", isOn: $scannerTorchOn)
+        }
         Section {
           NavigationLink(destination: ScannerAboutView()) {
             HStack {
@@ -23,6 +41,22 @@ struct ScannerSettingsView: View {
       }
       .navigationTitle("设置")
     }
+  }
+}
+
+struct BackendURLSettingsView: View {
+  @AppStorage("backendURL") private var backendURL: String = "http://192.168.50.128:5000"
+
+  var body: some View {
+    Form {
+      Section(header: Text("后端地址")) {
+        TextField("请输入后端地址", text: $backendURL)
+          .autocapitalization(.none)
+          .keyboardType(.URL)
+      }
+    }
+    .navigationTitle("后端地址")
+    .navigationBarTitleDisplayMode(.inline)
   }
 }
 
